@@ -6,21 +6,6 @@ import topology
 
 OUTPUT_FILE_NAME = "sample"
 
-"""
- Find nearst neighbor of a habitat set and return that. 
-"""
-def getNearstNeighbor(habNeighMap,habs):
-	
-	return None
-	
-
-def divideGridToSection(habNeighMap, sectnum):
-	sects = {}
-	last = 0
-	for i in range(sectnum):
-		habs = []
-		habs.append(last)
-		nearst = getNearstNeighbor(habNeighMap,habs)
 
  
 
@@ -53,7 +38,7 @@ def test():
 	#print habitatNeighMap	
 	#print topo.getInterconnMatInt()
 
-		
+	exit()	
 	
 	sim = simulation.Simulation(habitatNeighMap)
 	print "============"

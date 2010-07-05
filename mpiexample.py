@@ -10,15 +10,19 @@ comm = MPI.COMM_WORLD
 def master():	
 	print "master"
 	ntasks = comm.Get_size()
-	
-	data = {1:1,2:2}
+	data = dict()
+	data["aa"]= {"xx":"yy"}
+	data["bb"]="ttt"
+	data["cc"]=1
 	for rank in range(1,ntasks):
+		print "master -giden"
+		print data
 		comm.send(data, rank,tag=11)
 	data = None
 	n = 2
 	for rank in range(1,ntasks): 
  		data =comm.recv(source=rank,tag=12)
-		print "master "
+		print "master -gelen"
 		print data
 	"""
 	while True:
@@ -29,12 +33,12 @@ def master():
 	"""
 
 def slave():
-	print "slave"
+	print "slave -gelen"
 	#comm.send(data={"a":12,"b":34},dest=0,tag=11)
 	#while True:
 	data = comm.recv(source=0,tag =11)
 	
-	print data
+	print data["aa"]
 	time.sleep(1)
 	data = "ok"
 	comm.send(data,dest=0,tag=12)
