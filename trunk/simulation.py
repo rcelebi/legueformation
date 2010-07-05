@@ -2,6 +2,8 @@
 import habitat
 import topology
 import scalefree
+import master
+import slave
 
 import math
 import random
@@ -9,6 +11,8 @@ import getopt
 import csv
 import sys
 import time
+from mpi4py import MPI
+
 """
 Payoff matrix elements
 T: temptation
@@ -55,15 +59,10 @@ MOBILITY = 1
 
 nextId=1
 
+comm = MPI.COMM_WORLD
+MSG_INIT_TYPE = 10 
+MSG_MOVE_TYPE = 12 
 
-class HabitatSection:
-	def __init__(sectionId, numRow, numCol, sdfMatrix, numAgents):
-		self.selecitonId = selectionId
-		self.numRow = numRow
-		self.numCol = numCol
-		self.sdfMatrix =sdfMatrix
-		self.numAgents = numAgents
-		self.habitatMatrix = []
 
 class Simulation:
 
@@ -71,6 +70,7 @@ class Simulation:
 		self.habitats = dict()
 		self.habitatNeighborMap = habitatNeighMap
 		"""
+		
 		sfdmat = []
 		for i in range(4):
 			sfdmat.append([])
@@ -80,44 +80,6 @@ class Simulation:
 		self.createHabitats(4, 4, sfdmat, 16)	
 		"""
 	
-	def createHabitats(self, numRow, numCol, sdfMatrix, numAgents, habitatids=None):
-		global nextId
-		timeSteps = numAgents - SCALEFREE_INIT_NODES_NUM
-		topo = scalefree.ScaleFree(SCALEFREE_INIT_NODES_NUM, SCALEFREE_EDGES_NUM_TO_ATTACH, timeSteps)
-		intmat = topo.getInterconnMatInt()
-		
-		for i in range(numRow):
-			for j in range(numCol):
-				node2agent= {}
-				agents = self.createAgents(numAgents);
-				k=0
-				for node in topo.nodes:
-					node2agent[node.label] = agents[k].id
-					k+=1						
-				aintmat = []		
-				for e in intmat:
-					aintmat.append([node2agent[e[0]], node2agent[e[1]]])
-				
-				#print intmat
-				#print agentids
-				if habitatids == None:
-					habid = ++nextId
-				else:
-					habid = habitatids[i*numCol +j]
-				self.habitats[habid] = habitat.Habitat(habid, agents, aintmat, sdfMatrix[i][j])					
-					
-		return self.habitats
-
-	def createAgents(self, numAgents):
-		agents=[]
-		for i in range(numAgents):
-			if random.random() < PROB_COOPERATE:
-				strategy = STRATEGY_COOPERATE
-			else:
-				strategy = STRATEGY_DEFECT
-			agents.append(habitat.Agent(strategy))			
-		return agents
-
 
 	def master():
 		return None
@@ -140,7 +102,7 @@ class Simulation:
 				totalagentnum+= habitat.agentnum
 				totaldefnum+= habitat.defnum
 				totalcoopnum+= habitat.coopnum
-				# printing the last situation of all habitats at last iteration
+			# printing the last situation of all habitats at last iteration
 				if i == ITERATION_NUM:
 					logger.writerow([habitat.id, habitat.diversity, habitat.coopnum, habitat.defnum])
 			
@@ -166,7 +128,7 @@ class Simulation:
 			agentsaddedtohab.clear()
 
 			#find which agens will be moved between habitats
-			for k,habitat in self.habitats.items():
+			for k,habitat in seagentsMovedBtwSlaveslf.habitats.items():
 				
 				prob = 0.0
 				for agent in habitat.agents:
@@ -374,10 +336,54 @@ class Simulation:
 		else: 
 			return None 
 
+"""
+ Find nearst neighbor of a habitat set and return that. 
+"""
+def getNearstNeighbor(habNeighMap,habs):
+	nsets = []	
+	for h in habs:
+		nsets.extend(habNeighMap[h])
+	
+	nsets = [e for e in nsets if e not in habs]
+	return max(nsets, key= lambda a: nsets.count(a) )
+	
+
+def divideGridToSection(habNeighMap, sectnum, numhabs):
+	sects = {}
+	last = 1
+
+	for i in range(sectnum):		
+		habs = []		
+		habs.append(last)
+		for k in range(numhabs):
+			nearst = getNearstNeighbor(habNeighMap,habs)
+			habs.append(nearst)
+			last = nearst
+		sects[i] = habs
+	return sects		
+
+def makeNeighConnMap(topo):
+	
+	habitatNeighMap= {}
+	for edge in topo.getInterconnMatInt():
+		if edge[0] not in habitatNeighMap:
+			habitatNeighMap[edge[0]] = []
+		if edge[1] not in habitatNeighMap[edge[0]]: 
+			habitatNeighMap[edge[0]].append(edge[1])
+
+		if edge[1] not in habitatNeighMap:
+			habitatNeighMap[edge[1]] = []
+		if edge[0] not in habitatNeighMap[edge[1]]:
+			habitatNeighMap[edge[1]].append(edge[0])
+	return habitatNeighMap	
+
 if __name__ =='__main__':
 
-	args, opts = getopt.getopt(sys.argv[1:],"r:a:b:d:g:p:k:i:s:m:f")
+	args, opts = getopt.getopt(sys.argv[1:],"r:a:b:d:g:p:k:i:s:m:f:o")
 	
+
+	print args
+
 	if "-r" in args:
 		RUN_ID = int(args["-r"])
 	if "-a" in args:
@@ -403,17 +409,35 @@ if __name__ =='__main__':
 		TOPOLOGY_FILE_NAME = str(args["-f"])
 	if "-o" in args:
 		OUTPUT_FILE_NAME = str(args["-o"])
-	else: OUTPUT_FILE_NAME = "R"+RUN_ID+"_A"+AVALUE+"_B"+BVALUE+"_M"+DIVERSITY_DSTR_TYPE  
-	
-	
+#	else: OUTPUT_FILE_NAME = "R"+str(RUN_ID)+"_A"+str(AVALUE)+"_B"+str(BVALUE)+"_M"+str(DIVERSITY_DSTR_TYPE)  
+	OUTPUT_FILE_NAME ="output.txt"
+	TOPOLOGY_FILE_NAME ="topology_20.txt"
+		
 	logWriter = csv.writer(open(OUTPUT_FILE_NAME+"csv", 'w'), delimiter='\t', quotechar='|',  quoting=csv.QUOTE_MINIMAL)
 
-	topo = tpology.Topology()
+	topo = topology.Topology()
 	try:
-		topo.importFromFile(topoFile)
+		topo.importFromFile(TOPOLOGY_FILE_NAME)
 	except: 
-		pass
+		print "could not read topology file",TOPOLOGY_FILE_NAME
+
+	habitatNeighMap = makeNeighConnMap(topo) 
+	print habitatNeighMap
+
+	habitatids = [int(node.label) for node in topo.nodes]
+	simm = Simulation()
+	rank = comm.Get_rank()
 	
+	if rank ==0:
+		master = master.Master()
+	else:
+		sfdmat = []
+		for i in range(20):
+			sfdmat.append([])
+			for j in range(20):
+				sfdmat[i].append( simm.getNextDiversity() )
+
+		slave = slave.Slave(rank, 20, 20, sfdmat, 25, habitatids, habitatNeighMap)
 	
 	sim = Simulation()
 	sim.startSimulation(logWriter)
