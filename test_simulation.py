@@ -1,14 +1,40 @@
 #! /usr/bin/env python
 
 import simulation
+import scalefree
 import csv
 import topology
 
+import pylab
+import matplotlib.pyplot as plt
+
 OUTPUT_FILE_NAME = "sample"
+GRID_SIZE = 20
 
-
- 
-
+def testDivisonOfGrid():
+	topo = topology.Topology()
+	topoFile="topology_20.txt"
+	try:
+		topo.importFromFile(topoFile)
+	except: 
+		print "could not read topology file",topoFile
+	
+	habNM = simulation.makeNeighConnMap(topo)
+	sects = simulation.divideGridToSection(habNM,20,20)
+	print "sects ",sects
+	k=0
+	for habs in sects.values():
+		k=k+1
+		X = pylab.ones((20,20,3))*float(k*0.1)
+		print "habs" ,habs
+		for hab in habs:
+			hab=hab-1
+			xo=int(hab%GRID_SIZE)*20
+			yo=int(hab/GRID_SIZE)*20
+			print "X ",xo
+			print "Y ",yo
+			plt.figimage(X, xo, yo, origin='lower')
+	plt.show()
 
 def test():
 	
