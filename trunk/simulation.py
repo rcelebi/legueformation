@@ -339,27 +339,45 @@ class Simulation:
 """
  Find nearst neighbor of a habitat set and return that. 
 """
-def getNearstNeighbor(habNeighMap,habs):
+def getNearstNeighbor(habNeighMap,habs,used):
 	nsets = []	
 	for h in habs:
 		nsets.extend(habNeighMap[h])
+	#print "before",nsets
+	#print "used  ",used
+	#print "habs  ",habs
+	nsets = [e for e in nsets if e not in habs and e not in used]
+	#print "after ",nsets
 	
-	nsets = [e for e in nsets if e not in habs]
+	if not nsets : return None
+
 	return max(nsets, key= lambda a: nsets.count(a) )
 	
 
 def divideGridToSection(habNeighMap, sectnum, numhabs):
 	sects = {}
 	last = 1
-
+	used =[]
+	
+	size= sectnum*numhabs
+	
 	for i in range(sectnum):		
-		habs = []		
+		habs = []
+		while last in used:
+			last = random.randint(1,size)
+			print "last ",last
 		habs.append(last)
-		for k in range(numhabs):
-			nearst = getNearstNeighbor(habNeighMap,habs)
+		for k in range(numhabs-1):
+			nearst = getNearstNeighbor(habNeighMap,habs,used)
+			if nearst is None: break
 			habs.append(nearst)
 			last = nearst
+		used.extend(habs)
 		sects[i] = habs
+		print "habs ", habs
+		print "used ", used
+		print "size of used", len(used)
+		print "============="	
 	return sects		
 
 def makeNeighConnMap(topo):
@@ -419,7 +437,7 @@ if __name__ =='__main__':
 	try:
 		topo.importFromFile(TOPOLOGY_FILE_NAME)
 	except: 
-		print "could not read topology file",TOPOLOGY_FILE_NAME
+		print "could not read topo [360, 380, 379]logy file",TOPOLOGY_FILE_NAME
 
 	habitatNeighMap = makeNeighConnMap(topo) 
 	print habitatNeighMap
