@@ -60,15 +60,29 @@ MOBILITY = 1
 nextId=1
 
 comm = MPI.COMM_WORLD
-MSG_INIT_TYPE = 10 
+MSG_INIT_TYPE = 10
+MSG_TOURNAMENT_END_TYPE = 11
 MSG_MOVE_TYPE = 12 
+MSG_END_TYPE = 13
+
+SIM_SET = 1
 
 
 class Simulation:
+	global hab2sfd
+	global sec2habs
+	global habitatNeighMap
+	global sects
+	global habitats
 
-	def __init__(self,habitatNeighMap=dict()):
+	def __init__(self, secnum, divisionsize, habitatNeighMap=dict()):
 		self.habitats = dict()
 		self.habitatNeighborMap = habitatNeighMap
+		Simulation.__init__ = Simulation.__nomore__ # Redefine away the __init__ constructor
+			
+	def __nomore__(self, ignored):
+		print "No further entries can be created"
+		return
 		"""
 		
 		sfdmat = []
@@ -78,11 +92,7 @@ class Simulation:
 				sfdmat[i].append( self.getNextDiversity() )
 
 		self.createHabitats(4, 4, sfdmat, 16)	
-		"""
-	
-
-	def master():
-		return None
+		"""	
 
 	def startSimulation(self, logger):
 		times = {}
@@ -148,7 +158,7 @@ class Simulation:
 							selhab = self.selectANeighborHabitat(habitat, neighbors)
 
 							if selhab == None: continue
-			
+		
 							agentsremovedfromhab[agent] = habitat.id
 							agentsaddedtohab[agent] = selhab.id
 			#=====================================================================
@@ -172,169 +182,34 @@ class Simulation:
 			return neighbors[selhab] 
 		
 		return None
-	"""
-	remove agent from old habitat and add agent to new habitat
-	"""
-	def moveAgents(self, agentRemovedFromHab, agentsAddedToHab):
-		
-		for agent,habId in agentRemovedFromHab.items():
 
-			self.removeAgentFromHabitat(agent, self.habitats[habId])
-			 
-			self.addAgentIntoHabitat(agent, self.habitats[agentsAddedToHab.get(agent)], SCALEFREE_EDGES_NUM_TO_ATTACH)
-			
-	"""
-	do a binary search for the location i such that
-	probabilities [i-1]< val <= probabilites[i]
-	"""
-	def selectProb(self, n, prob):
-		val = random.random()
-		 
-		left =0
-		right = n-1
-		i = 0
-		while right >= left:
-			middle = (left+right)/2
- 			if (val- prob[middle]) < 0.0:
-				right = middle-1
-			elif (val - prob[middle]) > 0.0:
-				left = middle+1
-			else:
-			 	i = midlle
-				break
-	 		
-		if right < left:
-			i= left
-		# in the case there were neighboring items with probability 0
-		while i > 0 and prob[i-1] == val:
-			i-=1
+# exponential distribution of diversity values
+def expDist( x ):
+	return AVALUE * (1.0 / math.sqrt(x)-2.0)
 
-		return i
+# power distribution of diversity values
+def powLawDist( x ):
+	return AVALUE * (math.log(x) -1.0)
 
-	"""
-	while removing agent, to not lose connections of peer from the graph,
-	there is rewiring process
-		- no rewiring required if only it has one or no connections
-		- selecting a node (agent) to transfer all removed one' connection onto it
-			 with some probability based on it degree .
-		- transfer removed connections to selected peer 
-	"""
+# calculate Gaussian potential value for individual environment point
+def calculateGaussPotentialValue(self, i, j):
+	resulut = 1.0
+	# calculates distance between two points
+	dist2 = (i-GAUSS_CENTER_ROW)*(i-GAUSS_CENTER_ROW) + (j-GAUSS_CENTER_COL)*(j-GAUSS_CENTER_COL);
+	norm = int( math.sqrt(dist2) )
+	result = GAUSS_MAGNITUDE * math.exp((-1.0* norm* norm)/GAUSS_SPREAD) 
 
-	def removeAgentFromHabitat(self, agent, habitat):
-		agentsConnected = habitat.getConnectedAgents(agent)
-		edgesConnectedToRemoved = habitat.getConnectedEdges(agent)
-
-		agentsConnectedNum = len(agentsConnected)
-		if agentsConnectedNum <= 1:
-			for e in edgesConnectedToRemoved:
-				habitat.removeEdge(e)
-			habitat.removeAgent(agent)
-			return True
-			
-		prob=[]
-		totalDegree= float( sum(a.outdegree for a in agentsConnected))
-		prob.append( float(agentsConnected[0].outdegree)/ totalDegree )
-		for i in range(1, agentsConnectedNum):
-			prob.append( prob[i-1] + float(agentsConnected[i].outdegree)/totalDegree )
-
-		
-		selected = self.selectProb(agentsConnectedNum, prob)
-		selAgent = agentsConnected[selected]
-		
-		while selAgent == agent:
-			selected = self.selectProb(agentsConnectedNum, prob)
-			selAgent = agentsConnected[selected]
-		# remove agent and rewires its connections with a selected connected agent.
-		
-		
-		edgesTobeAdded = [] 
-		for edge in edgesConnectedToRemoved:
-			if agent.id == edge[1]	and selAgent.id != edge[0]:
-				newedge = [edge[0], selAgent.id]
-				edgesTobeAdded.append(newedge)
-			elif agent.id == edge[0] and selAgent.id != edge[1]:
-				newedge = [selAgent.id, edge[1]]				
-				edgesTobeAdded.append(newedge)
-	
-		# remove agent and its connections
-		for e in edgesConnectedToRemoved:
-			habitat.removeEdge(e)
-		habitat.removeAgent(agent)
-
-		edgesConnectedToSelected = habitat.getConnectedEdges(selAgent)
-		# connect edges to selected agent if there is no connection between these nodes 
-		for edge in edgesTobeAdded:
-			crossedge = [edge[1],edge[0]]
-			if edge not in edgesConnectedToSelected and crossedge not in edgesConnectedToSelected:
-				habitat.addEdge(edge)
-		
-		return True	
-
-	def createRandomEdge(self, numAgents, agents, newAgent, prob, totalDegre):	
-		attachPoint = self.selectProb(numAgents, prob)
-		attachAgent = agents[ attachPoint ]
-		return [newAgent.id, attachAgent.id]
-
-	def addAgentIntoHabitat(self, newAgent, habitat, numConn):
-		numAgents = len( habitat.agents ) 
-		if numAgents == 0:
-			habitat.addAgent(newAgent)
-			return True
-		
-		if numAgents == 1:
-			habitat.addAgent(newAgent)
-			habitat.addEdge([newAgent.id,habitat.agents[0].id])
-			return True
-		
-		if numConn > numAgents:	numConn = numAgents	
-			
-		totalDegree = float(habitat.totalOutDegree)
-		prob = []
-		prob.append( float(habitat.agents[0].outdegree)/ totalDegree)
-		for i in range(1, len(habitat.agents)):
-			prob.append( prob[i-1] + float(habitat.agents[i].outdegree)/totalDegree )
-
-		edges = []
-		for k in range(1,numConn):
-			edge = self.createRandomEdge(numAgents, habitat.agents, newAgent, prob, totalDegree)
-			if edge in edges or [edge[1], edge[0]] in edges:
-				k-=1
-			else: edges.append(edge)
-
-		habitat.addAgent(newAgent)
-		
-		for e in edges:
-			habitat.addEdge(e)
-
-		return True
-
-	# exponential distribution of diversity values
-	def expDist(self, x):
-		return AVALUE * (1.0 / math.sqrt(x)-2.0)
-	
-	# power distribution of diversity values
-	def powLawDist(self, x):
-		return AVALUE * (math.log(x) -1.0)
-
-	# calculate Gaussian potential value for individual environment point
-	def calculateGaussPotentialValue(self, i, j):
-		resulut = 1.0
-		# calculates distance between two points
-		dist2 = (i-GAUSS_CENTER_ROW)*(i-GAUSS_CENTER_ROW) + (j-GAUSS_CENTER_COL)*(j-GAUSS_CENTER_COL);
-		norm = int( math.sqrt(dist2) )
-		result = GAUSS_MAGNITUDE * math.exp((-1.0* norm* norm)/GAUSS_SPREAD) 
-
-	# get next diversity value
-	def getNextDiversity(self,i=0,j=0):
-		x = random.random()
-		if DIVERSITY_DISTR_TYPE == DIVERSITY_EXP_DISTR:
-			return self.expDist(x)
-		elif DIVERSITY_DISTR_TYPE == DIVERSITY_POW_LAW_DISTR:
-			return self.powLawDist(x)
-		elif DIVERSITY_DISTR_TYPE == DIVERSITY_GAUSS_DISTR:
-			return self.calculateGaussPotentialValue(i,j)
-		else: 
-			return None 
+# get next diversity value
+def getNextDiversity(i=0,j=0):
+	x = random.random()
+	if DIVERSITY_DISTR_TYPE == DIVERSITY_EXP_DISTR:
+		return expDist(x)
+	elif DIVERSITY_DISTR_TYPE == DIVERSITY_POW_LAW_DISTR:
+		return powLawDist(x)
+	elif DIVERSITY_DISTR_TYPE == DIVERSITY_GAUSS_DISTR:
+		return calculateGaussPotentialValue(i,j)
+	else: 
+		return None 
 
 """
  Find nearst neighbor of a habitat set and return that. 
@@ -352,6 +227,7 @@ def getNearstNeighbor(habNeighMap,habs,used):
 	if not nsets : return None
 
 	return max(nsets, key= lambda a: nsets.count(a) )
+					
 	
 
 def divideGridToSection(habNeighMap, sectnum, numhabs):
@@ -365,7 +241,6 @@ def divideGridToSection(habNeighMap, sectnum, numhabs):
 		habs = []
 		while last in used:
 			last = random.randint(1,size)
-			print "last ",last
 		habs.append(last)
 		for k in range(numhabs-1):
 			nearst = getNearstNeighbor(habNeighMap,habs,used)
@@ -375,13 +250,12 @@ def divideGridToSection(habNeighMap, sectnum, numhabs):
 		used.extend(habs)
 		sects[i] = habs
 		print "habs ", habs
-		print "used ", used
 		print "size of used", len(used)
 		print "============="	
 	return sects		
 
-def makeNeighConnMap(topo):
-	
+
+def makeNeighConnMap(topo):	
 	habitatNeighMap= {}
 	for edge in topo.getInterconnMatInt():
 		if edge[0] not in habitatNeighMap:
@@ -395,10 +269,79 @@ def makeNeighConnMap(topo):
 			habitatNeighMap[edge[1]].append(edge[0])
 	return habitatNeighMap	
 
+
+def calculateSFDMatrix(habitatids):
+	sfdmat = {}
+	for hid in habitatids:
+			sfdmat[hid] = getNextDiversity()
+	return sfdmat
+
+
+def createAgents(numAgents):
+	agents=[]
+	for i in range(numAgents):
+		if random.random() < PROB_COOPERATE:
+			strategy = STRATEGY_COOPERATE
+		else:
+			strategy = STRATEGY_DEFECT
+		agents.append(habitat.Agent(strategy))			
+	return agents
+
+				
+
+def createHabitats(numAgents, habitatids, sfdarray):
+
+	timeSteps = numAgents - SCALEFREE_INIT_NODES_NUM
+	topo = scalefree.ScaleFree(SCALEFREE_INIT_NODES_NUM, SCALEFREE_EDGES_NUM_TO_ATTACH, timeSteps)
+	intmat = topo.getInterconnMatInt()
+	habitats = dict()
+	for habid in habitatids:
+		node2agent= {}
+		agents = createAgents(numAgents)
+		k=0
+		for node in topo.nodes:
+			node2agent[node.label] = agents[k].id
+			k+=1						
+		aintmat = []		
+		for e in intmat:
+			aintmat.append([node2agent[e[0]], node2agent[e[1]]])
+	
+		habitats[habid] = habitat.Habitat(habid, agents, aintmat, sfdarray[habid])					
+			
+	return habitats
+
+def getTopology(topologyFileName):
+	TOPOLOGY_FILE_NAME ="topology_20.txt"
+	topo = topology.Topology()
+	try:
+		topo.importFromFile(TOPOLOGY_FILE_NAME)
+	except: 
+		print "could not read topology file",TOPOLOGY_FILE_NAME	
+	return topo
+
+
+
+def generateId2HabMap(sec2habs):
+	habitats = dict()	
+	for habs in sec2habs.values():
+		for hid,hab in habs.items():
+			if hid not in habitats.keys(): 
+				habitats[hid] = hab
+	return habitats 
+
+def generateSec2HabMap(numagent,sects,hab2sfd):
+	sec2habs = dict()
+	for sid,sect in sects.items():
+		habs = createHabitats(numagents,sect,hab2sfd)
+		sec2habs[sid] = habs
+	return sec2habs
+
+
+
+
 if __name__ =='__main__':
 
 	args, opts = getopt.getopt(sys.argv[1:],"r:a:b:d:g:p:k:i:s:m:f:o")
-	
 
 	print args
 
@@ -429,35 +372,54 @@ if __name__ =='__main__':
 		OUTPUT_FILE_NAME = str(args["-o"])
 #	else: OUTPUT_FILE_NAME = "R"+str(RUN_ID)+"_A"+str(AVALUE)+"_B"+str(BVALUE)+"_M"+str(DIVERSITY_DSTR_TYPE)  
 	OUTPUT_FILE_NAME ="output.txt"
+
 	TOPOLOGY_FILE_NAME ="topology_20.txt"
 		
 	logWriter = csv.writer(open(OUTPUT_FILE_NAME+"csv", 'w'), delimiter='\t', quotechar='|',  quoting=csv.QUOTE_MINIMAL)
 
-	topo = topology.Topology()
-	try:
-		topo.importFromFile(TOPOLOGY_FILE_NAME)
-	except: 
-		print "could not read topo [360, 380, 379]logy file",TOPOLOGY_FILE_NAME
 
-	habitatNeighMap = makeNeighConnMap(topo) 
-	print habitatNeighMap
-
-	habitatids = [int(node.label) for node in topo.nodes]
-	simm = Simulation()
+	size = comm.Get_size();
 	rank = comm.Get_rank()
 	
-	if rank ==0:
-		master = master.Master()
-	else:
-		sfdmat = []
-		for i in range(20):
-			sfdmat.append([])
-			for j in range(20):
-				sfdmat[i].append( simm.getNextDiversity() )
+	numagents =20
 
-		slave = slave.Slave(rank, 20, 20, sfdmat, 25, habitatids, habitatNeighMap)
+	if rank ==0:
+		topo = getTopology(TOPOLOGY_FILE_NAME)
+		habitatids = [int(node.label) for node in topo.nodes]
+		habitatNeighMap = makeNeighConnMap(topo) 
+		hab2sfd = calculateSFDMatrix(habitatids)
+		sects = divideGridToSection(habitatNeighMap, size, 20)
+		sec2habs = generateSec2HabMap(numagents, sects, hab2sfd)
+		habitats = generateId2HabMap(sec2habs)
+		data = []
+		for i in range(size):
+			e = dict()
+			e["section"] = sec2habs[i]
+			partHabNeighMap = dict()
+			partHabNeighSFDMap = dict()
+			for habid in sec2habs[i]:
+				partHabNeighMap[habid]= habitatNeighMap[habid]
+				partHabNeighSFDMap[habid] = hab2sfd[habid]
+				for n in habitatNeighMap[habid]:
+					partHabNeighSFDMap[n] =hab2sfd[n]
+			e["neighbhors"] = (partHabNeighMap,partHabNeighSFDMap)	
+			data.append(e)
+		data = comm.scatter(data, root=0)
+		master = master.Master(sects, habitats)
+	else:
+		data = None
+		data = comm.scatter(data, root=0)
+		sec2habsk = data["section"]
+		if data["neighbhors"] is not None:
+			partHabNeighMap= data["neighbhors"][0] 
+			partHabNeighSFDMap = data["neighbhors"][1]
+		print "sec --", sec2habsk
+		print "parthabneighMAp", partHabNeighMap
+		slave = slave.Slave(rank, sec2habsk , partHabNeighMap, partHabNeighSFDMap)
 	
-	sim = Simulation()
-	sim.startSimulation(logWriter)
+
+
+	#sim = Simulation()
+	#sim.startSimulation(logWriter)
 	
 	
