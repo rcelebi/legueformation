@@ -27,10 +27,11 @@ class Slave:
 		self.totalDefNum = 0
 		self.totalCoopNum = 0
 		self.hab2sfd = hab2sfd
+		self.times= {}
 			
 		iteration = 1
 		step = 0
-		while( True ):
+		while( iteration  < simulation.ITERATION_NUM ):
 			if step == 0:
 				print "slave---step 0"
 				data = simulation.comm.recv(source=self.masterId,tag = simulation.MSG_INIT_TYPE)
@@ -39,22 +40,45 @@ class Slave:
 				self.startTournament(iteration)
 				step= step +1
 			elif step == 1:
-				agentstransfered = {}					
+				agentstransferred = {}					
 				for agent,habid in self.agentsaddedtohab.items():
 					if habid not in hab2sfd.keys():
-						agentstransfered[agent] = habid
+						agentstransferred[agent] = habid
 
-				self.sendTournamentEndInfoMsg(self.slaveId, agentstransfered, self.totalScore, self.totalCoopNum, self.totalDefNum)
-				print "Total moves : %d"%(len(  self.agentsaddedtohab ))
+				self.sendTournamentEndInfoMsg(self.slaveId, agentstransferred, self.totalScore, self.totalCoopNum, self.totalDefNum)
+				print "%d. slave: First moves : %d"%(self.slaveId, len(  self.agentsaddedtohab ))
+				#transfer agents between habitats in the same container (slaves)								
 				self.moveAgents(self.agentsremovedfromhab, self.agentsaddedtohab)
 				step= step +1
 			elif step == 2:
+				#=====================================================================
+				#transfer agents between different containers (slaves)				
+				self.times[3] = time.time()
 				self.recieveDoMovementMsg()
+			
+				print "%d. slave: Transfer time: %d"%(self.slaveId, self.times[3]-self.times[2])
+				print "%d. slave: Total moves : %d"%(self.slaveId, len( self.agentsremovedfromhab ))
+			
+				self.totalAgentNum = 0
+				self.totalDefNum = 0
+				self.totalCoopNum = 0	
+				for k,habitat in self.habitats.items():
+					self.totalAgentNum+= habitat.agentnum
+					self.totalDefNum+= habitat.defnum
+					self.totalCoopNum+= habitat.coopnum
+				if self.totalAgentNum != 0:
+					fc = float(self.totalCoopNum) / float(self.totalAgentNum)
+				else: fc = 0.0		
+
+				print "%d. slave:  Number of defects %d and number of cooperates %d"%(self.slaveId,self.totalDefNum,self.totalCoopNum) 
+				self.times[4] = time.time()
+				print "%d. slave: Total running time: %d"%(self.slaveId,self.times[4]-self.times[0])
 				step= step +1
 			elif step == 3:
 				self.sendMovementEndAck()
 				step = 0
-			iteration +=1	
+				iteration +=1
+				
 
 		print "*******FINISH****** SLAVE"		 
 
@@ -66,27 +90,29 @@ class Slave:
 	"""
 	def startTournament(self, i):
 
-		times= {}
-		times[0] = time.time()
-		
-		
+		self.times[0] = time.time()
 		self.totalAgentNum = 0
 		self.totalDefNum = 0
-		self.totalCoopNum = 0
+		self.totalCoopNum = 0	
+		
+		for k,habitat in self.habitats.items():
+			self.totalAgentNum+= habitat.agentnum
+			self.totalDefNum+= habitat.defnum
+			self.totalCoopNum+= habitat.coopnum
 					
-		times[1] = time.time()
+		self.times[1] = time.time()
 
 		print "%d. slave:  Number of defects %d and number of cooperates %d"%(self.slaveId,self.totalDefNum,self.totalCoopNum) 
 
 		print "%d. slave: Iteration %d"%(self.slaveId,i)
-		print "%d. slave: Logging time : %d"%(self.slaveId, times[1]-times[0])
+		print "%d. slave: Logging time : %d"%(self.slaveId, self.times[1]-self.times[0])
 
 		for k,habitat in self.habitats.items():
 			habitat.startTournament()
 		
-		times[2] = time.time()
+		self.times[2] = time.time()
 		
-		print "%d. slave: Encounter time : %d"%(self.slaveId, times[2]-times[1])
+		print "%d. slave: Encounter time : %d"%(self.slaveId, self.times[2]-self.times[1])
 
 		self.agentsremovedfromhab.clear()
 		self.agentsaddedtohab.clear()
@@ -117,27 +143,6 @@ class Slave:
 						self.agentsremovedfromhab[agent] = habitat.id
 						self.agentsaddedtohab[agent] = habids[selhab]
 
-		#=====================================================================
-		#transfer agents between containers
-		#self.moveAgents(self.agentsremovedfromhab, self.agentsaddedtohab)
-		
-		times[3] = time.time()
-		print "%d. slave: Transfer time: %d"%(self.slaveId, times[3]-times[2])
-		print "%d. slave: Total moves : %d"%(self.slaveId, len( self.agentsremovedfromhab))
-
-		times[4] = time.time()
-		print "%d. slave: Total running time: %d"%(self.slaveId,times[4]-times[0])
-		
-		for k,habitat in self.habitats.items():
-			self.totalAgentNum+= habitat.agentnum
-			self.totalDefNum+= habitat.defnum
-			self.totalCoopNum+= habitat.coopnum
-		if self.totalAgentNum != 0:
-			fc = float(self.totalCoopNum) / float(self.totalAgentNum)
-		else: fc = 0.0		
-		print "%d. slave:  Number of defects %d and number of cooperates %d"%(self.slaveId,self.totalDefNum,self.totalCoopNum) 
-
-
 
 	"""
 	select a neighbor habitat for agents to be transfered 
@@ -157,12 +162,12 @@ class Slave:
 		- each habitat' total score
 		- each habitat' cooperates/defects number
 	"""
-	def sendTournamentEndInfoMsg(self, mySlaveId, agentstransfered, totalScore, coopNum, defNum):
+	def sendTournamentEndInfoMsg(self, mySlaveId, agentstransferred, totalScore, coopNum, defNum):
 		data = dict()
 		if mySlaveId is not None:
 			data["slaveId"] = mySlaveId
-		if agentstransfered is not None:
-			data["agentstransfered"] = agentstransfered
+		if agentstransferred is not None:
+			data["agentstransferred"] = agentstransferred
 		if totalScore is not None:	
 			data["score"] = totalScore
 		if coopNum is not None:
@@ -170,6 +175,7 @@ class Slave:
 		if defNum is not None:
 			data["defNum"] = defNum
 		#send data to master
+		print "agents transferred ",len(agentstransferred)
 		simulation.comm.send(data, dest = 0, tag= simulation.MSG_TOURNAMENT_END_TYPE)
 			
 			
@@ -183,11 +189,11 @@ class Slave:
 	"""	
 	def recieveDoMovementMsg(self):
 		data = simulation.comm.recv(source=self.masterId,tag = simulation.MSG_MOVE_TYPE)
-		agentstransfered ={}
+		agentstransferred ={}
 		if data["sectionaddinfo"] is not None:
-			agentstransfered = data["sectionaddinfo"]
+			agentstransferred = data["sectionaddinfo"]
 
-		for agent in agentstransfered:
+		for agent in agentstransferred:
 			if self.habitats.has_key( agentsAddedToHab[agent] ):  
 				self.addAgentIntoHabitat(agent, self.habitats[agentsAddedToHab[agent]], simulation.SCALEFREE_EDGES_NUM_TO_ATTACH)
 

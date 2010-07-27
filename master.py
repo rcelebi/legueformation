@@ -8,12 +8,12 @@ class Master:
 		self.slaves = range(1,self.ntasks)
 		self.sect2hab = sects
 		self.allhabitats = allhabitats
-		self.totaldefnum = 0
-		self.totalcoopnum = 0
 	 	self.habid2agentsadded = dict()
 		step = 0
 		iteration = 1
 		while(iteration  < simulation.ITERATION_NUM ):
+			self.totaldefnum = 0
+			self.totalcoopnum = 0
 			if step == 0:
 				print "master---step 0"
 				self.startTournament()
@@ -37,7 +37,8 @@ class Master:
 			elif step == 3:
 				self.waitAcknowledge()
 				step = 0
-			iteration += 1
+				iteration += 1
+				print "iteration ", iteration
 	
 	print "*******FINISH****** MASTER"
 
@@ -72,8 +73,8 @@ class Master:
 
 		if data["slaveId"] is not None:
 			slaveId= data["slaveId"]
-		if data["agentstransfered"] is not None:
-			agentstransfered = data["agentstransfered"]
+		if data["agentstransferred"] is not None:
+			agentstransferred = data["agentstransferred"]
 		if data["score"] is not None:	
 			totalScore = data["score"]
 		if data["coopNum"] is not None:
@@ -86,7 +87,7 @@ class Master:
 
 		print "RECEIVED- from slave %d cooperate num: %d defect num: %d"%(slaveId,coopNum,defNum)
 
-		for agent,hid in agentstransfered.items():
+		for agent,hid in agentstransferred.items():
 			if not self.habid2agentsadded.has_key(hid):
 				 self.habid2agentsadded[hid] = [agent]
 			else:

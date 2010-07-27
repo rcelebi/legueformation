@@ -20,7 +20,7 @@ R: reward
 P: penalty
 S: sucker's payoff
 """
-PAYOFF_T = 1.4
+PAYOFF_T = 1.2
 PAYOFF_R = 1.0
 PAYOFF_P = 0.0
 PAYOFF_S = 0.0
@@ -388,11 +388,13 @@ if __name__ =='__main__':
 		habitatids = [int(node.label) for node in topo.nodes]
 		habitatNeighMap = makeNeighConnMap(topo) 
 		hab2sfd = calculateSFDMatrix(habitatids)
-		sects = divideGridToSection(habitatNeighMap, size, 20)
+		sects = divideGridToSection(habitatNeighMap, size-1, 50)
 		sec2habs = generateSec2HabMap(numagents, sects, hab2sfd)
 		habitats = generateId2HabMap(sec2habs)
 		data = []
-		for i in range(size):
+		first = dict()
+		data.append(first)
+		for i in range(size-1):
 			e = dict()
 			e["section"] = sec2habs[i]
 			partHabNeighMap = dict()
